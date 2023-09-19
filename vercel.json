@@ -1,0 +1,14 @@
+{
+  "builds": [
+    {
+      "src": "farmsetu/wsgi.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "farmsetu/wsgi.py"
+    }
+  ]
+}
