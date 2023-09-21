@@ -72,10 +72,7 @@ def get_weather(request):
     if len(combination) == 0:
         # fetch data from metoffice website and store in APIData table
 
-        url = 'https://www.metoffice.gov.uk/pub/data/weather/uk/climate/datasets/' + \
-            parameter + '/date/' + state + '.txt'
-        # data = get(
-        #     'https://www.metoffice.gov.uk/pub/data/weather/uk/climate/datasets/Tmin/date/England.txt')
+        url = 'https://www.metoffice.gov.uk/pub/data/weather/uk/climate/datasets/' +            parameter + '/date/' + state + '.txt'
         response = get(url)
 
         data = response.text.split('\n')[7:-2]
@@ -90,8 +87,6 @@ def get_weather(request):
                     row_data[i] = None
                 row_data[i] = float(row_data[i])
 
-            print(row_data)
-
             api_data = APIData(parameter=parameter, state=state, year=row_data[0], jan=row_data[1], feb=row_data[2], mar=row_data[3], apr=row_data[4], may=row_data[5], jun=row_data[6], jul=row_data[7], aug=row_data[8], sep=row_data[9], oct=row_data[10], nov=row_data[11], dec=row_data[12], win=row_data[13], spr=row_data[14], sum=row_data[15], aut=row_data[16], ann=row_data[17])
             api_data_list.append(api_data)
 
@@ -104,7 +99,6 @@ def get_weather(request):
     # fetch data from APIData table
     fetched_data = APIData.objects.filter(parameter=parameter, state=state)
     serialized_data = APIDataSerializer(fetched_data, many=True)
-    # print(serialized_data.data)
 
     # coldest annual mean year
     coldest_annual_mean_year = APIData.objects.filter(
