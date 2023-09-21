@@ -1,0 +1,17 @@
+constantly==15.1.0
+incremental==22.10.0
+jmespath==1.0.1
+lxml==4.9.3
+packaging==23.1
+pyasn1==0.5.0
+pycparser==2.21
+PyDispatcher==2.0.7
+PyYAML==6.0.1
+queuelib==1.6.2
+six==1.16.0
+soupsieve==2.4.1
+twisted-iocpsupport==1.0.4
+typing_extensions==4.7.1
+urllib3==2.0.3
+w3lib==2.1.1
+zope.interface==6.0
