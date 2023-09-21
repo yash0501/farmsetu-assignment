@@ -4,6 +4,11 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework.parsers import JSONParser
 from rest_framework.decorators import api_view
 from requests import get
+from .models import Combination, APIData
+from django.core.serializers import serialize
+import json
+from .serializers import APIDataSerializer
+from django.db.models import Min, Max
 
 # Create your views here.
 
@@ -16,168 +21,136 @@ def index(request):
 
 @api_view(['GET'])
 def get_weather(request):
-    params = request.GET.get('parameter', 'Tmin')
+    parameter = request.GET.get('parameter', 'Tmin')
     state = request.GET.get('state', 'England')
-    url = 'https://www.metoffice.gov.uk/pub/data/weather/uk/climate/datasets/' + \
-        params + '/date/' + state + '.txt'
-    # data = get(
-    #     'https://www.metoffice.gov.uk/pub/data/weather/uk/climate/datasets/Tmin/date/England.txt')
-    data = get(url)
 
-    lines = data.text.splitlines()
+    # if not present, then fetch data from metoffice website and store in Combination table
+    # else fetch data from Combination table
 
-    headers = lines[5].split()
+    params = [
+        'Tmin',
+        'Tmax',
+        'Tmean',
+        'Sunshine',
+        'Rainfall',
+        'Raindays1mm',
+        'AirFrost'
+    ]
 
-    key = []
+    states = [
+        'UK',
+        'England',
+        'Wales',
+        'Scotland',
+        'Northern_Ireland',
+        'England_and_Wales',
+        'England_N',
+        'England_S',
+        'Scotland_N',
+        'Scotland_E',
+        'Scotland_W',
+        'England_E_and_NE',
+        'England_NW_and_N_Wales',
+        'Midlands',
+        'East_Anglia',
+        'England_SW_and_S_Wales',
+        'England_SE_and_Central_S'
+    ]
 
-    values = []
-    for i in range(6, len(lines)-1):
-        values.append(lines[i].split())
+    if parameter not in params:
+        print(params)
+        return HttpResponse('Invalid parameter')
 
-    data = {}
-    for i in range(len(values)):
-        data[int(values[i][0])] = values[i][1:]
+    if state not in states:
+        print(state)
+        return HttpResponse('Invalid state')
 
-    sum_50 = 0
-    sum = 0
-    for i in range(50):
-        sum_50 += float(data[2022-i][16])
+    # check if params and state are present in Combination table or not
 
-    for i in range(len(values)):
-        sum += float(data[2022-i][16])
+    combination = Combination.objects.filter(parameter=parameter, state=state)
 
-    print(sum_50/50)
-    print(sum/len(values))
+    if len(combination) == 0:
+        # fetch data from metoffice website and store in APIData table
 
-    coldest_annual_mean = 9999
-    coldest_annual_mean_year = 0
-    for i in range(len(values)):
-        if float(data[2022-i][16]) < coldest_annual_mean:
-            coldest_annual_mean = float(data[2022-i][16])
-            coldest_annual_mean_year = 2022-i
+        url = 'https://www.metoffice.gov.uk/pub/data/weather/uk/climate/datasets/' + \
+            parameter + '/date/' + state + '.txt'
+        # data = get(
+        #     'https://www.metoffice.gov.uk/pub/data/weather/uk/climate/datasets/Tmin/date/England.txt')
+        response = get(url)
 
-    print(coldest_annual_mean)
-    print(coldest_annual_mean_year)
+        data = response.text.split('\n')[7:-2]
 
-    hottest_annual_mean = -100
-    hottest_annual_mean_year = 0
-    for i in range(len(values)):
-        if float(data[2022-i][16]) > hottest_annual_mean:
-            hottest_annual_mean = float(data[2022-i][16])
-            hottest_annual_mean_year = 2022-i
+        api_data_list = []
 
-    print(hottest_annual_mean)
-    print(hottest_annual_mean_year)
+        for row in data:
+            row_data = row.split()
+            # convert row_data to float
+            for i in range(1, len(row_data)):
+                if row_data[i] == '---':
+                    row_data[i] = None
+                row_data[i] = float(row_data[i])
 
-    # count number of years where annual mean temperature was more than that of their previous year in last 50 years
-    count = 0
-    for i in range(1, 51):
-        if float(data[2022-i][16]) > float(data[2022-i-1][16]):
-            count += 1
+            print(row_data)
 
-    print(count)
+            api_data = APIData(parameter=parameter, state=state, year=row_data[0], jan=row_data[1], feb=row_data[2], mar=row_data[3], apr=row_data[4], may=row_data[5], jun=row_data[6], jul=row_data[7], aug=row_data[8], sep=row_data[9], oct=row_data[10], nov=row_data[11], dec=row_data[12], win=row_data[13], spr=row_data[14], sum=row_data[15], aut=row_data[16], ann=row_data[17])
+            api_data_list.append(api_data)
 
-    # coldest month of entire dataset
-    coldest_month_temp = 9999
-    coldest_month_year = 0
-    coldest_month_month = 0
+        APIData.objects.bulk_create(api_data_list)
 
-    for i in range(len(values)):
-        for j in range(0, 12):
-            # print(float(data[2022-i][j]))
-            if float(data[2022-i][j]) < coldest_month_temp:
-                coldest_month_temp = float(data[2022-i][j])
-                coldest_month_year = 2022-i
-                coldest_month_month = j
+        add_combination = Combination.objects.create(
+            parameter=parameter, state=state)
+        add_combination.save()
 
-    print(coldest_month_temp)
-    print(coldest_month_year)
-    print(coldest_month_month)
+    # fetch data from APIData table
+    fetched_data = APIData.objects.filter(parameter=parameter, state=state)
+    serialized_data = APIDataSerializer(fetched_data, many=True)
+    # print(serialized_data.data)
 
-    # hottest month of entire dataset
-    hottest_month_temp = -100
-    hottest_month_year = 0
-    hottest_month_month = 0
+    # coldest annual mean year
+    coldest_annual_mean_year = APIData.objects.filter(
+        parameter=parameter, state=state).order_by('ann').first()
 
-    for i in range(len(values)):
-        for j in range(0, 12):
-            # print(float(data[2022-i][j]))
-            if float(data[2022-i][j]) > hottest_month_temp:
-                hottest_month_temp = float(data[2022-i][j])
-                hottest_month_year = 2022-i
-                hottest_month_month = j
+    # hottest annual mean year
+    hottest_annual_mean_year = APIData.objects.filter(
+        parameter=parameter, state=state).order_by('-ann').first()
 
-    print(hottest_month_temp)
-    print(hottest_month_year)
-    print(hottest_month_month)
-
-    # count number of years where annual mean temperature was more than that of their previous year in last 50 years
-
-    if params == 'Tmin' or params == 'Tmax' or params == 'Tmean':
+    if parameter == 'Tmin' or parameter == 'Tmax' or parameter == 'Tmean':
         result = {
-            'coldest_annual_mean': coldest_annual_mean,
-            'coldest_annual_mean_year': coldest_annual_mean_year,
-            'hottest_annual_mean': hottest_annual_mean,
-            'hottest_annual_mean_year': hottest_annual_mean_year,
-            'mean_temp_more_than_previous_50': count,
-            'coldest_month_temp': coldest_month_temp,
-            'coldest_month_year': coldest_month_year,
-            'coldest_month_month': coldest_month_month,
-            'hottest_month_temp': hottest_month_temp,
-            'hottest_month_year': hottest_month_year,
-            'hottest_month_month': hottest_month_month,
-            'data': data
+            'coldest_annual_mean': coldest_annual_mean_year.ann,
+            'coldest_annual_mean_year': coldest_annual_mean_year.year,
+            'hottest_annual_mean': hottest_annual_mean_year.ann,
+            'hottest_annual_mean_year': hottest_annual_mean_year.year,
+            'data': serialized_data.data
         }
-    elif params == 'Sunshine':
+    elif parameter == 'Sunshine':
         result = {
-            'sunniest_annual_mean': hottest_annual_mean,
-            'sunniest_annual_mean_year': hottest_annual_mean_year,
-            'sunniest_month_value': hottest_month_temp,
-            'sunniest_month_year': hottest_month_year,
-            'sunniest_month_month': hottest_month_month,
-            'least_sunniest_annual_mean': coldest_annual_mean,
-            'least_sunniest_annual_mean_year': coldest_annual_mean_year,
-            'least_sunniest_month_value': coldest_month_temp,
-            'least_sunniest_month_year': coldest_month_year,
-            'least_sunniest_month_month': coldest_month_month,
-            'data': data
+            'sunniest_annual_mean': hottest_annual_mean_year.ann,
+            'sunniest_annual_mean_year': hottest_annual_mean_year.year,
+            'data': serialized_data.data
         }
-    elif params == 'Rainfall':
+    elif parameter == 'Rainfall':
         result = {
-            'rainiest_annual_mean': hottest_annual_mean,
-            'rainiest_annual_mean_year': hottest_annual_mean_year,
-            'rainiest_month_value': hottest_month_temp,
-            'rainiest_month_year': hottest_month_year,
-            'rainiest_month_month': hottest_month_month,
-            'least_rainiest_annual_mean': coldest_annual_mean,
-            'least_rainiest_annual_mean_year': coldest_annual_mean_year,
-            'least_rainiest_month_value': coldest_month_temp,
-            'least_rainiest_month_year': coldest_month_year,
-            'least_rainiest_month_month': coldest_month_month,
-            'data': data
+            'rainiest_annual_mean': hottest_annual_mean_year.ann,
+            'rainiest_annual_mean_year': hottest_annual_mean_year.year,
+            'least_rainiest_annual_mean': coldest_annual_mean_year.ann,
+            'least_rainiest_annual_mean_year': coldest_annual_mean_year.year,
+            'data': serialized_data.data
         }
-    elif params == 'Raindays1mm':
+    elif parameter == 'Raindays1mm':
         result = {
-            'rainiest_annual_mean': hottest_annual_mean,
-            'rainiest_annual_mean_year': hottest_annual_mean_year,
-            'rainiest_month_value': hottest_month_temp,
-            'rainiest_month_year': hottest_month_year,
-            'rainiest_month_month': hottest_month_month,
-            'least_rainiest_annual_mean': coldest_annual_mean,
-            'least_rainiest_annual_mean_year': coldest_annual_mean_year,
-            'least_rainiest_month_value': coldest_month_temp,
-            'least_rainiest_month_year': coldest_month_year,
-            'least_rainiest_month_month': coldest_month_month,
-            'data': data
+            'rainiest_annual_mean': hottest_annual_mean_year.ann,
+            'rainiest_annual_mean_year': hottest_annual_mean_year.year,
+            'least_rainiest_annual_mean': coldest_annual_mean_year.ann,
+            'least_rainiest_annual_mean_year': coldest_annual_mean_year.year,
+            'data': serialized_data.data
         }
-    elif params == 'AirFrost':
+    elif parameter == 'AirFrost':
         result = {
-            'least_airfrost_annual_mean': coldest_annual_mean,
-            'least_airfrost_annual_mean_year': coldest_annual_mean_year,
-            'least_airfrost_month_value': coldest_month_temp,
-            'least_airfrost_month_year': coldest_month_year,
-            'least_airfrost_month_month': coldest_month_month,
-            'data': data
+            'least_airfrost_annual_mean': coldest_annual_mean_year.ann,
+            'least_airfrost_annual_mean_year': coldest_annual_mean_year.year,
+            'data': serialized_data.data
         }
+    else:
+        result = {}
 
-    return JsonResponse(result)
+    return JsonResponse(result, safe=False)
