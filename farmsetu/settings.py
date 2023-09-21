@@ -29,9 +29,7 @@ SECRET_KEY = 'django-insecure-g0-=6bns^r2+27+r1#r9_ju=z3mg!sv&1(hbr1ko3&ujqhn_1q
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = [
-    'farmsetu-assignment.vercel.app'
-]
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
