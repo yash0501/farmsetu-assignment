@@ -30,7 +30,7 @@ SECRET_KEY = 'django-insecure-g0-=6bns^r2+27+r1#r9_ju=z3mg!sv&1(hbr1ko3&ujqhn_1q
 DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
-
+PORT = 10000
 
 # Application definition
 
